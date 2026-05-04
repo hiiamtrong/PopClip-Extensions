@@ -88,6 +88,28 @@ export const options = [
     type: "string",
     description: "Extra instructions appended to the system prompt. E.g. 'Be concise. Use professional tone.'",
   },
+  {
+    identifier: "explainLanguage",
+    label: "Explain: Response Language",
+    type: "multiple",
+    values: ["same", "primary"],
+    valueLabels: ["Same as input", "Primary language"],
+    defaultValue: "same",
+  },
+  {
+    identifier: "explainMode",
+    label: "Explain: Response Handling",
+    type: "multiple",
+    values: ["append", "replace", "copy"],
+    valueLabels: ["Append", "Replace", "Copy"],
+    defaultValue: "append",
+  },
+  {
+    identifier: "explainInstructions",
+    label: "Explain: Additional Instructions",
+    type: "string",
+    description: "Extra instructions appended to the system prompt. E.g. 'Use simple words. Give examples.'",
+  },
 ] as const;
 
 type Options = InferOptions<typeof options>;
@@ -104,20 +126,19 @@ interface Response {
 }
 
 export function getErrorInfo(error: unknown): string {
-  if (typeof error === "object" && error !== null && "response" in error) {
+  if (typeof error === "object" && error !== null) {
     // biome-ignore lint/suspicious/noExplicitAny: provider error shape varies
-    const response = (error as any).response;
-    return `Error (code ${response.status}): ${response.data.error.message}`;
+    const e = error as any;
+    if (e.response) {
+      return `Error (code ${e.response.status}): ${e.response.data?.error?.message ?? JSON.stringify(e.response.data)}`;
+    }
+    if (e.request) {
+      return `Network error (no response): ${e.message} | URL: ${e.config?.url ?? "unknown"} | Base: ${e.config?.baseURL ?? "unknown"}`;
+    }
   }
   return String(error);
 }
 
-function createClient(options: Options) {
-  return axios.create({
-    baseURL: `https://${options.domain.replace(/\/$/, "")}/`,
-    headers: { Authorization: `Bearer ${options.apikey}` },
-  });
-}
 
 function handleResponse(inputText: string, responseText: string, mode: string) {
   const copy = mode === "copy" || popclip.modifiers.shift;
@@ -134,6 +155,13 @@ function handleResponse(inputText: string, responseText: string, mode: string) {
   }
   // debug: remove after testing
   // print(`[AITranslate] input="${inputText}" response="${responseText}" mode="${mode}"`);
+}
+
+function createClient(options: Options) {
+  return axios.create({
+    baseURL: `https://${options.domain.replace(/\/$/, "")}/`,
+    headers: { Authorization: `Bearer ${options.apikey}` },
+  });
 }
 
 async function callAPI(options: Options, systemPrompt: string, inputText: string, mode: string) {
@@ -174,6 +202,16 @@ const improve: ActionFunction<Options> = async (input, options) => {
   await callAPI(options, systemPrompt, input.text.trim(), options.improveMode);
 };
 
+const explain: ActionFunction<Options> = async (input, options) => {
+  const langInstruction = options.explainLanguage === "primary"
+    ? `Respond in ${options.primaryLang}.`
+    : "Respond in the same language as the input.";
+  const base = `You are a helpful assistant. Explain the following text clearly and concisely. ${langInstruction} Return ONLY the explanation.`;
+  const instructions = options.explainInstructions.trim();
+  const systemPrompt = instructions ? `${base}\n${instructions}` : base;
+  await callAPI(options, systemPrompt, input.text.trim(), options.explainMode);
+};
+
 export const actions: Action<Options>[] = [
   {
     title: "Translate",
@@ -184,5 +222,10 @@ export const actions: Action<Options>[] = [
     title: "Improve",
     icon: "symbol:wand.and.stars",
     code: improve,
+  },
+  {
+    title: "Explain",
+    icon: "symbol:text.magnifyingglass",
+    code: explain,
   },
 ];
