@@ -10,6 +10,9 @@
 
 import axios from "axios";
 
+const RESPONSE_MODE_VALUES = ["replace", "append", "copy", "show"] as const;
+const RESPONSE_MODE_LABELS = ["Replace", "Append", "Copy", "Show Popup"] as const;
+
 export const options = [
   {
     identifier: "apikey",
@@ -64,8 +67,8 @@ export const options = [
     identifier: "translateMode",
     label: "Translate: Response Handling",
     type: "multiple",
-    values: ["replace", "append", "copy"],
-    valueLabels: ["Replace", "Append", "Copy"],
+    values: RESPONSE_MODE_VALUES,
+    valueLabels: RESPONSE_MODE_LABELS,
     defaultValue: "replace",
   },
   {
@@ -78,8 +81,8 @@ export const options = [
     identifier: "improveMode",
     label: "Improve: Response Handling",
     type: "multiple",
-    values: ["replace", "append", "copy"],
-    valueLabels: ["Replace", "Append", "Copy"],
+    values: RESPONSE_MODE_VALUES,
+    valueLabels: RESPONSE_MODE_LABELS,
     defaultValue: "replace",
   },
   {
@@ -100,9 +103,16 @@ export const options = [
     identifier: "explainMode",
     label: "Explain: Response Handling",
     type: "multiple",
-    values: ["append", "replace", "copy"],
-    valueLabels: ["Append", "Replace", "Copy"],
-    defaultValue: "append",
+    values: RESPONSE_MODE_VALUES,
+    valueLabels: RESPONSE_MODE_LABELS,
+    defaultValue: "show",
+  },
+  {
+    identifier: "showMaxChars",
+    label: "Show Popup: Max Characters",
+    type: "string",
+    defaultValue: "500",
+    description: "Max characters for 'Show Popup' mode. If response exceeds this, it will be copied to clipboard instead.",
   },
   {
     identifier: "explainInstructions",
@@ -140,7 +150,7 @@ export function getErrorInfo(error: unknown): string {
 }
 
 
-function handleResponse(inputText: string, responseText: string, mode: string) {
+function handleResponse(inputText: string, responseText: string, mode: string, showMaxChars = 500) {
   const copy = mode === "copy" || popclip.modifiers.shift;
   const replace = mode === "replace";
 
@@ -148,6 +158,13 @@ function handleResponse(inputText: string, responseText: string, mode: string) {
     popclip.copyText(responseText);
   } else if (replace) {
     popclip.pasteText(responseText);
+  } else if (mode === "show") {
+    if (responseText.length > showMaxChars) {
+      popclip.copyText(responseText);
+      popclip.showSuccess();
+    } else {
+      popclip.showText(responseText, { style: "large" });
+    }
   } else {
     // append mode: replace selection with original + response
     popclip.pasteText(`${inputText}\n\n${responseText}`);
@@ -164,7 +181,7 @@ function createClient(options: Options) {
   });
 }
 
-async function callAPI(options: Options, systemPrompt: string, inputText: string, mode: string) {
+async function callAPI(options: Options, systemPrompt: string, inputText: string, mode: string, showMaxChars?: number) {
   const client = createClient(options);
   const messages: Message[] = [
     { role: "system", content: systemPrompt },
@@ -175,7 +192,7 @@ async function callAPI(options: Options, systemPrompt: string, inputText: string
       model: options.customModel || options.model || "gpt-4.1-nano",
       messages,
     });
-    handleResponse(inputText, data.choices[0].message.content.trim(), mode);
+    handleResponse(inputText, data.choices[0].message.content.trim(), mode, showMaxChars);
   } catch (e) {
     popclip.showText(getErrorInfo(e));
   }
@@ -207,9 +224,11 @@ const explain: ActionFunction<Options> = async (input, options) => {
     ? `Respond in ${options.primaryLang}.`
     : "Respond in the same language as the input.";
   const base = `You are a helpful assistant. Explain the following text clearly and concisely. ${langInstruction} Return ONLY the explanation.`;
+  const maxChars = parseInt(options.showMaxChars, 10) || 500;
   const instructions = options.explainInstructions.trim();
-  const systemPrompt = instructions ? `${base}\n${instructions}` : base;
-  await callAPI(options, systemPrompt, input.text.trim(), options.explainMode);
+  const limitInstruction = `Keep your response under ${maxChars} characters.`;
+  const systemPrompt = [base, limitInstruction, instructions].filter(Boolean).join("\n");
+  await callAPI(options, systemPrompt, input.text.trim(), options.explainMode, maxChars);
 };
 
 export const actions: Action<Options>[] = [
