@@ -211,7 +211,7 @@ const translate: ActionFunction<Options> = async (input, options) => {
 };
 
 const DEFAULT_IMPROVE_PROMPT =
-  "You are a writing assistant. Improve the grammar, clarity, and style of the text. Keep the same language. Return ONLY the improved text, no explanation.";
+  "You are a writing assistant. Improve the grammar, clarity, and style of the text. Keep the same language. Do not add new ideas or content that was not in the original. Return ONLY the improved text.";
 
 const improve: ActionFunction<Options> = async (input, options) => {
   const instructions = options.improveInstructions.trim();
