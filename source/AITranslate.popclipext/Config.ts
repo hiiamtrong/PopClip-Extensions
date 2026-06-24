@@ -153,16 +153,21 @@ export function getErrorInfo(error: unknown): string {
 // Small models sometimes ignore "no preamble / no quotes" and prepend a line
 // like "Here is the translation:" or wrap the whole output in quotes. Strip
 // those defensively so the output is the bare text regardless of the model.
-function cleanResponse(text: string): string {
+function cleanResponse(text: string, inputText = ""): string {
   let out = text.trim();
   // Drop a leading preamble line such as "Here is the translation:".
   out = out.replace(/^here(?:'s| is| are)\b[^\n:]*:\s*\n*/i, "").trim();
-  // Unwrap a single pair of matching quotes around the whole output.
-  const pairs: [string, string][] = [['"', '"'], ["'", "'"], ["“", "”"], ["‘", "’"]];
-  for (const [open, close] of pairs) {
-    if (out.length >= 2 && out.startsWith(open) && out.endsWith(close) && !out.slice(1, -1).includes(open)) {
-      out = out.slice(1, -1).trim();
-      break;
+  // Unwrap a single pair of matching quotes the model wrapped around the whole
+  // output — but only if the original input had no quotes, so we never strip
+  // quotes that legitimately belong to the selected text (e.g. a quoted line).
+  const inputHasQuotes = /["'“”‘’]/.test(inputText);
+  if (!inputHasQuotes) {
+    const pairs: [string, string][] = [['"', '"'], ["'", "'"], ["“", "”"], ["‘", "’"]];
+    for (const [open, close] of pairs) {
+      if (out.length >= 2 && out.startsWith(open) && out.endsWith(close) && !out.slice(1, -1).includes(open)) {
+        out = out.slice(1, -1).trim();
+        break;
+      }
     }
   }
   return out;
@@ -211,7 +216,7 @@ async function callAPI(options: Options, systemPrompt: string, inputText: string
       messages,
       ...(temperature !== undefined ? { temperature } : {}),
     });
-    handleResponse(inputText, cleanResponse(data.choices[0].message.content), mode, showMaxChars);
+    handleResponse(inputText, cleanResponse(data.choices[0].message.content, inputText), mode, showMaxChars);
   } catch (e) {
     popclip.showText(getErrorInfo(e));
   }
