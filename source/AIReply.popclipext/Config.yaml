@@ -1,0 +1,91 @@
+#popclip
+identifier: com.hiiamtrong.popclip.extension.aireply
+name: AI Reply
+description: Select a message, type what you want to say, and generate a full reply using an OpenAI-compatible API.
+icon: symbol:arrowshape.turn.up.left
+popclipVersion: 4586
+entitlements: [network]
+interpreter: zsh
+after: copy-result
+shell script: |
+  # Ask the user what they want to say in the reply.
+  answer=$(/usr/bin/osascript <<'APPLE'
+  try
+    set dlg to display dialog "What do you want to say in your reply?" default answer "" with title "AI Reply" buttons {"Cancel", "Generate"} default button "Generate"
+    return text returned of dlg
+  on error number -128
+    return "__CANCELLED__"
+  end try
+  APPLE
+  )
+
+  # User pressed Cancel — do nothing.
+  [ "$answer" = "__CANCELLED__" ] && exit 0
+
+  model="${POPCLIP_OPTION_CUSTOMMODEL:-${POPCLIP_OPTION_MODEL:-gpt-4.1-nano}}"
+  domain="${POPCLIP_OPTION_DOMAIN:-api.openai.com/v1}"
+  domain="${domain%/}"
+
+  if [ -n "$POPCLIP_OPTION_REPLYLANG" ]; then
+    langline="Write the reply in $POPCLIP_OPTION_REPLYLANG."
+  else
+    langline="Detect and use the same language as the message."
+  fi
+
+  system="You are helping the user write a reply to a message. $langline Write a complete, natural reply that expresses the user's intent. Output ONLY the reply text, with no preamble, no explanations, and no surrounding quotes."
+
+  user="Message being replied to:
+  $POPCLIP_TEXT
+
+  What I want to say in the reply:
+  $answer"
+
+  body=$(/usr/bin/jq -n --arg model "$model" --arg sys "$system" --arg usr "$user" \
+    '{model: $model, temperature: 0.6, messages: [{role: "system", content: $sys}, {role: "user", content: $usr}]}')
+
+  resp=$(/usr/bin/curl -sS "https://$domain/chat/completions" \
+    -H "Authorization: Bearer $POPCLIP_OPTION_APIKEY" \
+    -H "Content-Type: application/json" \
+    -d "$body")
+
+  content=$(printf '%s' "$resp" | /usr/bin/jq -r '.choices[0].message.content // empty')
+
+  if [ -z "$content" ]; then
+    err=$(printf '%s' "$resp" | /usr/bin/jq -r '.error.message // empty')
+    [ -z "$err" ] && err="Unknown error from API"
+    ERRMSG="$err" /usr/bin/osascript -e 'display alert "AI Reply" message (system attribute "ERRMSG") as warning'
+    exit 1
+  fi
+
+  printf '%s' "$content"
+options:
+  - identifier: apikey
+    label: API Key
+    type: secret
+    description: "Obtain an API key from your provider."
+  - identifier: model
+    label: Model
+    type: multiple
+    defaultValue: gpt-4.1-nano
+    values:
+      - gpt-4.1
+      - gpt-4.1-mini
+      - gpt-4.1-nano
+      - gpt-5
+      - gpt-5-mini
+      - gpt-5-nano
+      - o3
+      - o4-mini
+  - identifier: customModel
+    label: Custom Model
+    type: string
+    description: "Will override 'Model'. Model list: https://platform.openai.com/docs/pricing"
+  - identifier: replyLang
+    label: Reply Language
+    type: string
+    description: "Language for the generated reply. Leave blank to reply in the same language as the message."
+  - identifier: domain
+    label: API Base Domain
+    type: string
+    defaultValue: api.openai.com/v1
+    description: "Leave as default unless you use a custom server (e.g. api.groq.com/openai/v1)."
