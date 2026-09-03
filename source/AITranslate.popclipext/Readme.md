@@ -1,19 +1,27 @@
 # AI Translate
 
-A PopClip extension to translate or improve selected text using any
-OpenAI-compatible API (OpenAI, Groq, Gemini, Ollama, etc.).
+A PopClip extension to translate, improve, or humanize selected text using an
+OpenAI-compatible API with Structured Outputs support.
 
 ### Actions
 
-**Translate** — Detects the language of the selected text and translates it
-bidirectionally between your two configured languages. If the text is in your
-Primary Language, it translates to the Secondary Language, and vice versa.
+**Translate** — Translates text written entirely in your Secondary Language to
+your Primary Language. Primary-language, other-language, and mixed-language
+selections are translated completely to your Secondary Language.
 
-**Improve** — Rewrites the selected text to improve grammar, clarity, and style
-while keeping the same language.
+**Improve** — Preserves the language of selections written entirely in either
+your Primary or Secondary Language while improving grammar, clarity, and style.
+Mixed-language and other-language selections are converted completely to your
+Secondary Language.
 
-Both actions replace the selected text by default. This can be changed to append
-or copy via the Response Handling settings.
+**Humanizer** — Uses the same language routing as Improve, removes common
+AI-writing patterns, and shortens the text without dropping facts or changing
+its meaning or voice.
+
+These three actions first use AI to detect `langInput`, then pass
+`{ body, langInput }` to a second request. The strict response contains
+`{ body, langOutput }`. They replace the selected text by default; this can be
+changed to append or copy via the Response Handling settings.
 
 ### Configuration
 
@@ -34,7 +42,8 @@ override it. Leave _Custom Model_ blank to use the dropdown selection.
 #### API Base Domain
 
 The base domain for the API endpoint. Defaults to `api.openai.com/v1` for
-OpenAI. Change this to use other OpenAI-compatible providers:
+OpenAI. Change this to use another provider that supports Chat Completions
+Structured Outputs (`response_format: json_schema`):
 
 - **OpenAI**: `api.openai.com/v1` (default)
 - **Groq**: `api.groq.com/openai/v1`
@@ -42,11 +51,13 @@ OpenAI. Change this to use other OpenAI-compatible providers:
 
 #### Primary / Secondary Language
 
-The two languages to translate between. The extension auto-detects which
-language the selected text is in and translates to the other one.
-
-- **Primary Language**: Your main language (default: `English`)
-- **Secondary Language**: The other language (default: `Spanish`)
+- **Primary Language**: Preserved by Improve and Humanizer; also the Translate
+  output for
+  selections entirely in your Secondary Language (default: `English`)
+- **Secondary Language**: Preserved by Improve and Humanizer and used for their
+  mixed-language output; also the Translate output for Primary Language,
+  other-language, and
+  mixed-language selections (default: `Spanish`)
 
 #### Additional Instructions
 
@@ -56,6 +67,7 @@ customise translation or improvement behaviour. Examples:
 - `Keep original formatting. Do not translate code, variable names, or URLs.`
 - `Use natural phrasing, not literal translation.`
 - `Be concise. Use a professional tone.`
+- `Keep the writer's casual voice.`
 
 ### Notes
 
