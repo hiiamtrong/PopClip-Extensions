@@ -18,10 +18,12 @@ Secondary Language.
 AI-writing patterns, and shortens the text without dropping facts or changing
 its meaning or voice.
 
-These three actions first use AI to detect `langInput`, then pass
-`{ body, langInput }` to a second request. The strict response contains
-`{ body, langOutput }`. They replace the selected text by default; this can be
-changed to append or copy via the Response Handling settings.
+Each of these actions sends one request. The model detects the selection's
+language and returns a strict response `{ langInput, body, langOutput }`. The
+extension checks `langOutput` against the routing rules above and shows an error
+instead of pasting a result in the wrong language. They replace the selected
+text by default; this can be changed to append or copy via the Response Handling
+settings.
 
 ### Configuration
 
@@ -52,12 +54,10 @@ Structured Outputs (`response_format: json_schema`):
 #### Primary / Secondary Language
 
 - **Primary Language**: Preserved by Improve and Humanizer; also the Translate
-  output for
-  selections entirely in your Secondary Language (default: `English`)
+  output for selections entirely in your Secondary Language (default: `English`)
 - **Secondary Language**: Preserved by Improve and Humanizer and used for their
   mixed-language output; also the Translate output for Primary Language,
-  other-language, and
-  mixed-language selections (default: `Spanish`)
+  other-language, and mixed-language selections (default: `Spanish`)
 
 #### Additional Instructions
 
@@ -75,4 +75,7 @@ Author: hiiamtrong
 
 ## Changelog
 
+- 2026-10-20: Translate, Improve and Humanizer now send one request per action
+  and require a provider with Structured Outputs
+  (`response_format: json_schema`). Added the Humanizer action.
 - 2026-04-30: Initial release.
