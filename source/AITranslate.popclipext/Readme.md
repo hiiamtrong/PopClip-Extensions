@@ -71,6 +71,11 @@ customise translation or improvement behaviour. Examples:
 
 ### Notes
 
+A selection can contain the object replacement character (U+FFFC), which apps
+use for an inline image such as an emoji. Plain text cannot carry the image
+back, so the extension replaces each one with a space, or removes it next to a
+line break, before sending the text.
+
 Author: hiiamtrong
 
 ## Changelog
