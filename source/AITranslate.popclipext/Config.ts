@@ -243,6 +243,19 @@ export function getErrorInfo(error: unknown): string {
   return String(error);
 }
 
+// U+FFFC is the object replacement character apps put in a selection for an inline image. Models copy it into the result or rewrite around it, so it becomes a space, or nothing next to a line break.
+export const cleanInput = (text: string) =>
+  text
+    .replace(
+      /(?:[^\S\r\n]*\uFFFC)+[^\S\r\n]*/g,
+      (match, at: number, all: string) => {
+        const edge = (c?: string) =>
+          c === undefined || c === "\n" || c === "\r";
+        return edge(all[at - 1]) || edge(all[at + match.length]) ? "" : " ";
+      },
+    )
+    .trim();
+
 // Small models sometimes ignore "no preamble / no quotes" and prepend a line
 // like "Here is the translation:" or wrap the whole output in quotes. Strip
 // those defensively so the output is the bare text regardless of the model.
@@ -298,7 +311,7 @@ export function handleResponse(
     }
   } else {
     // append mode: replace selection with original + response
-    popclip.pasteText(`${inputText}\n\n${responseText}`);
+    popclip.pasteText(`${cleanInput(inputText)}\n\n${responseText}`);
     popclip.showSuccess();
   }
 }
@@ -326,7 +339,10 @@ export async function requestText(
     model: options.customModel || options.model || "gpt-4.1-nano",
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: JSON.stringify({ body: inputText }) },
+      {
+        role: "user",
+        content: JSON.stringify({ body: cleanInput(inputText) }),
+      },
     ],
     ...(languageMode
       ? {
@@ -408,7 +424,7 @@ const languageAction =
     await callAPI(
       options,
       instructions ? `${base}\n${instructions}` : base,
-      input.text.trim(),
+      input.text,
       options[`${mode}Mode` as const],
       undefined,
       0.2,
@@ -431,7 +447,7 @@ const explain: ActionFunction<Options> = async (input, options) => {
   await callAPI(
     options,
     systemPrompt,
-    input.text.trim(),
+    input.text,
     options.explainMode,
     maxChars,
   );

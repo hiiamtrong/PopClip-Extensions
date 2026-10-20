@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  cleanInput,
   DEFAULT_HUMANIZER_PROMPT,
   DEFAULT_IMPROVE_PROMPT,
   DEFAULT_TRANSLATE_PROMPT,
@@ -392,5 +393,72 @@ for (const langOutput of ["english", "English ", "ENGLISH"]) {
     ),
     "Hello",
     `langOutput ${JSON.stringify(langOutput)} names the right language`,
+  );
+}
+
+for (const [input, expected] of [
+  ["Dev,\uFFFCThanks!", "Dev, Thanks!"],
+  ["Thanks \uFFFC a lot", "Thanks a lot"],
+  ["guests \uFFFC\nAlso", "guests\nAlso"],
+  ["ok \uFFFC\n\n\uFFFC\nbye", "ok\n\n\nbye"],
+  ["correctness \uFFFC\uFFFC1\uFFFC\uFFFC\uFFFC", "correctness 1"],
+  ["a \uFFFC \uFFFC b", "a b"],
+  ["a\u00A0\uFFFC\u00A0b", "a b"],
+  ["a\uFFFC\r\nb", "a\r\nb"],
+  ["a\n\uFFFCb", "a\nb"],
+  ["\uFFFCHello\uFFFC", "Hello"],
+  ["\uFFFC\uFFFC", ""],
+  ["a\n\nb", "a\n\nb"],
+  ["- item\n    - nested", "- item\n    - nested"],
+  ["line  \nnext", "line  \nnext"],
+  ["  a  ", "a"],
+  ["", ""],
+] as const) {
+  assert.equal(cleanInput(input), expected, JSON.stringify(input));
+}
+
+for (const mode of ["improve", undefined] as const) {
+  const { client, calls } = fakeClient(
+    mode ? strict("English", "Hi", "English") : "ok",
+  );
+  await requestText(
+    client,
+    options,
+    "system",
+    "Hi\uFFFCThanks \uFFFC",
+    0.2,
+    mode,
+  );
+  assert.deepEqual(
+    JSON.parse(calls[0].messages[1].content),
+    { body: "Hi Thanks" },
+    `inline image markers must not reach the model (${mode ?? "explain"})`,
+  );
+}
+
+{
+  const log: string[] = [];
+  const stub = {
+    modifiers: { shift: false },
+    showText: (text: string) => log.push(`show:${text}`),
+    copyText: (text: string) => log.push(`copy:${text}`),
+    showSuccess: () => log.push("success"),
+    pasteText: (text: string) => log.push(`paste:${text}`),
+  };
+  Object.assign(globalThis, { popclip: stub });
+  const run = (mode: string, shift = false) => {
+    log.length = 0;
+    stub.modifiers.shift = shift;
+    handleResponse("a\uFFFCb\uFFFC", "out", mode);
+    return [...log];
+  };
+  assert.deepEqual(run("replace"), ["paste:out"]);
+  assert.deepEqual(run("copy"), ["copy:out"]);
+  assert.deepEqual(run("show"), ["show:out"]);
+  assert.deepEqual(run("replace", true), ["copy:out"], "shift always copies");
+  assert.deepEqual(
+    run("append"),
+    ["paste:a b\n\nout", "success"],
+    "append shows the cleaned selection, not the raw one",
   );
 }
